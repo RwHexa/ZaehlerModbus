@@ -44,20 +44,56 @@ Der ESP32 ist **Modbus-Master**, der Zähler ist **Slave** (Adresse 1).
 |---|---|
 | Eastron SDM120-Modbus | Version **mit Modbus**. Beim SDM120 gibt es auch eine reine S0-Variante. |
 | D1 Mini ESP32 (ESP32-WROOM-32) | **klassischer ESP32**. ESP32-S3 und ESP32-C3 haben **kein Bluetooth Classic**! |
-| RS485↔TTL-Modul | **für 3,3 V geeignet** (MAX3485 / SP3485), ideal mit automatischer Richtungsumschaltung |
+| RS485↔TTL-Modul | **Waveshare „TTL TO RS485 (B)"**, Hutschiene und galvanisch getrennt (siehe 2.1). Alternativ jedes **für 3,3 V geeignete** Modul (MAX3485 / SP3485). |
 | Leitung | verdrilltes Adernpaar, z. B. ein Paar aus CAT5/CAT6 |
-| 120-Ω-Widerstand | optional, Busabschluss bei langen Leitungen |
+| 120-Ω-Widerstand | optional, Busabschluss bei langen Leitungen. Beim empfohlenen Modul per DIP-Schalter zuschaltbar, also nicht extra nötig. |
 | 5-V-Netzteil | Hutschienennetzteil oder USB-Netzteil, mindestens 500 mA (WLAN und Bluetooth ziehen Stromspitzen) |
 | Android-Handy | Android 6 oder neuer mit Bluetooth |
 
 ### Hinweis zum Pegel
 Klassische blaue **MAX485-Module** sind für 5 V gebaut. Laufen sie mit 5 V, liefert der RO-Ausgang 5 V an den ESP32. Der ESP32 ist **nicht 5-V-tolerant**. Ein **MAX3485- oder SP3485-Modul** an 3,3 V ist die saubere Lösung.
 
+### 2.1 Empfohlener RS485-Umsetzer
+
+**Waveshare „TTL TO RS485 (B)"** (Artikel 23778), [Produktseite](https://www.waveshare.com/ttl-to-rs485-b.htm)
+
+| Eigenschaft | Wert |
+|---|---|
+| Bauform | Gehäuse für **35-mm-Hutschiene**, 91,6 × 58,7 × 23,3 mm |
+| Isolation | **galvanisch getrennt**, Signale und Versorgung; die isolierte Seite braucht kein eigenes Netzteil |
+| TTL-Pegel | 3,3 V bis 5 V |
+| Versorgung | 3,3 V bis 5 V, mit Verpolungs- und Überspannungsschutz |
+| Busabschluss | **120 Ω per DIP-Schalter** zuschaltbar |
+| Anschlüsse | Schraubklemmen auf beiden Seiten |
+| Schutz | 600 W Überspannungsableiter |
+| Baudrate | bis 2 MBaud, die hier genutzten 2400 sind unkritisch |
+
+Ausschlaggebend ist die **galvanische Trennung**. Der SDM120 sitzt im Verteilerschrank, der ESP32 wegen der Funkreichweite möglichst außerhalb (Kapitel 3). Beide Enden der Busleitung liegen damit an unterschiedlichen Massen. Ohne Trennung fließen Ausgleichsströme über die Datenleitung, und bei einer Störung im 230-V-Teil hängt der ESP32 direkt daran.
+
+Die TTL-Seite führt nur **VCC, GND, TXD und RXD**. Ein Halbduplex-Umsetzer mit lediglich diesen vier Signalen schaltet die Richtung selbst um, deshalb steht `PIN_RS485_DE` in `config.h` auf `-1` und IO4 bleibt frei. Waveshare benennt die Automatik auf der Produktseite nicht ausdrücklich — vor dem Kauf beim Händler bestätigen lassen oder in den Schaltplan sehen.
+
+⚠ **Versorge das Modul mit 3,3 V, nicht mit 5 V.** Bei solchen Modulen folgt der TTL-Pegel der Versorgungsspannung. Mit 5 V an VCC lägen 5 V an IO16 — genau der oben beschriebene Fehler.
+
+**Günstige Alternative ohne Isolation:** [Waveshare „RS485 Board (3.3V)"](https://www.waveshare.com/rs485-board-3.3v.htm) (Artikel 4777) mit SP3485 und Richtungspin. Für den Testaufbau auf dem Schreibtisch ausreichend, dann gilt die Verdrahtung nach 3.1b und `PIN_RS485_DE 4`.
+
 ---
 
 ## 3. Verdrahtung
 
-### D1 Mini ESP32 ↔ RS485-Modul
+### 3.1a D1 Mini ESP32 ↔ Waveshare „TTL TO RS485 (B)" (empfohlen)
+
+| RS485-Modul | D1 Mini ESP32 | Funktion |
+|---|---|---|
+| VCC | **3V3** | Versorgung 3,3 V — **nicht an 5 V** (2.1) |
+| GND | GND | Masse |
+| TXD | IO16 | Modul sendet → ESP32 empfängt (UART2 RX) |
+| RXD | IO17 | ESP32 sendet → Modul empfängt (UART2 TX) |
+
+Es gibt keine Richtungsleitung, `PIN_RS485_DE` steht auf `-1` und IO4 bleibt frei.
+
+⚠ Die Beschriftung ist aus Sicht des **Moduls** zu lesen: dessen `TXD` gehört an den **RX** des ESP32. Bleiben die Werte leer, sind erfahrungsgemäß zuerst diese beiden Leitungen zu tauschen.
+
+### 3.1b D1 Mini ESP32 ↔ Modul mit DE/RE (Alternative)
 
 | RS485-Modul | D1 Mini ESP32 | Funktion |
 |---|---|---|
@@ -67,7 +103,7 @@ Klassische blaue **MAX485-Module** sind für 5 V gebaut. Laufen sie mit 5 V, lie
 | DI / TXD | IO17 | Senden (UART2 TX) |
 | DE + RE (gebrückt) | IO4 | Richtung: HIGH = Senden, LOW = Empfangen |
 
-- Hat dein Modul eine **automatische Richtungsumschaltung** (keine DE/RE-Pins), setzt du in `config.h` den Wert `PIN_RS485_DE` auf `-1`.
+- Für diese Variante setzt du in `config.h` den Wert `PIN_RS485_DE` auf `4`.
 - Beim ESP32 lässt sich der UART auf fast jeden GPIO legen. Andere Pins trägst du einfach in `config.h` ein. **Nicht verwenden**: GPIO 0, 2, 5, 12, 15 (Boot-Pins), 6–11 (Flash), und GPIO 34–39 nur als Eingang (also höchstens für RX).
 - Die Beschriftung des D1 Mini ESP32 kann je nach Hersteller abweichen. Maßgeblich ist der GPIO-Aufdruck „IO16", „IO17", „IO4".
 
@@ -75,8 +111,11 @@ Klassische blaue **MAX485-Module** sind für 5 V gebaut. Laufen sie mit 5 V, lie
 
 | RS485-Modul | SDM120 Klemme |
 |---|---|
-| A (+) | A |
-| B (−) | B |
+| A (+) | **10** (A) |
+| B (−) | **9** (B) |
+| SGND / GND der isolierten Seite | **8** (G) |
+
+Beim empfohlenen Modul hat die isolierte Seite eine eigene Masse. Lege sie auf Klemme 8 (G), dann hat der Bus einen definierten Bezug. Bei einem Modul **ohne** Trennung bleibt Klemme 8 frei, weil dessen Masse bereits über den ESP32 verbunden ist.
 
 Hinweise zur Busleitung:
 - Verwende ein **verdrilltes Adernpaar** für A und B.
@@ -87,15 +126,16 @@ Hinweise zur Busleitung:
 ### Schaltbild (vereinfacht)
 
 ```
-        D1 Mini ESP32                  RS485-Modul                 SDM120
-      ┌──────────────┐              ┌──────────────┐           ┌───────────┐
-      │ 3V3  ────────┼─────────────▶│ VCC          │           │           │
-      │ GND  ────────┼─────────────▶│ GND          │           │           │
-      │ IO16 ◀───────┼──────────────┤ RO        A ─┼───────────┤ A         │
-      │ IO17 ────────┼─────────────▶│ DI        B ─┼───────────┤ B         │
-      │ IO4  ────────┼─────────────▶│ DE+RE        │           │           │
-      └──────────────┘              └──────────────┘           └───────────┘
+        D1 Mini ESP32              TTL TO RS485 (B)              SDM120
+      ┌──────────────┐        ┌────────────────────┐        ┌───────────┐
+      │ 3V3  ────────┼───────▶│ VCC    ║      A+ ──┼────────┤ 10   A    │
+      │ GND  ────────┼───────▶│ GND    ║      B− ──┼────────┤  9   B    │
+      │ IO16 ◀───────┼────────┤ TXD    ║    SGND ──┼────────┤  8   G    │
+      │ IO17 ────────┼───────▶│ RXD    ║           │        │           │
+      └──────────────┘        └────────────────────┘        └───────────┘
 ```
+
+Die Doppellinie `║` steht für die galvanische Trennung im Modul: links die ESP32-Seite, rechts die Busseite zum Zähler. IO4 wird nicht gebraucht. Für ein Modul mit DE/RE gilt stattdessen die Verdrahtung nach 3.1b.
 
 ### ⚠ Sicherheit
 Der SDM120 wird im **230-V-Netz** installiert. Vom Gateway werden **nur die Modbus-Klemmen** angeschlossen. Einbau und Anschluss im Zähler- oder Verteilerschrank gehören in die Hände einer **Elektrofachkraft**. Das Netzteil muss für den Einbauort geeignet sein, zum Beispiel ein Hutschienennetzteil.
@@ -163,7 +203,7 @@ Der Ordnername muss dem Namen der `.ino` entsprechen, sonst öffnet die Arduino 
 | `MQTT_BASE` | Basis-Topic | `strom/sdm120` |
 | `MODBUS_BAUD` | wie am Zähler eingestellt | 2400 |
 | `MODBUS_SLAVE` | Modbus-Adresse des Zählers | 1 |
-| `PIN_RS485_RX/TX/DE` | Pinbelegung, DE = -1 für Auto-Modul | 16 / 17 / 4 |
+| `PIN_RS485_RX/TX/DE` | Pinbelegung, DE = -1 für Modul mit automatischer Richtungsumschaltung, sonst der GPIO (z. B. 4) | 16 / 17 / **-1** |
 | `POLL_INTERVAL_MS` | Abstand zwischen Messzyklen | 2000 |
 | `MODBUS_PAUSE_MS` | Pause zwischen Telegrammen | 30 |
 | `MAX_FEHLER_IN_FOLGE` | Fehlversuche, bevor die Werte als ungültig gelten | 3 |
@@ -317,8 +357,8 @@ Der ESP32 teilt sich eine Funkeinheit für beides und schaltet im Zeitmultiplex 
 1. Leuchtet die Power-LED am RS485-Modul?
 2. Stimmen **Baudrate und Adresse** in `config.h` mit dem Zählermenü überein?
 3. **A und B tauschen.**
-4. Ist DE/RE an IO4 angeschlossen, oder bei einem Auto-Modul `PIN_RS485_DE = -1` gesetzt?
-5. Sind RX und TX richtig herum? RO gehört an IO16, DI an IO17.
+4. Ist bei einem Auto-Modul `PIN_RS485_DE = -1` gesetzt, oder bei einem Modul mit DE/RE der richtige GPIO eingetragen und angeschlossen?
+5. Sind RX und TX richtig herum? Beim empfohlenen Modul gehört `TXD` an IO16 und `RXD` an IO17, bei einem DE/RE-Modul `RO` an IO16 und `DI` an IO17.
 6. Serial Monitor mit 115200 Baud öffnen und die Meldungen `[MODBUS]` beobachten.
 
 ### Bluetooth-Probleme
@@ -341,7 +381,8 @@ App-seitige Fehlersuche: siehe `APP_INVENTOR.md`, Kapitel 7.
 - [ ] Baudrate und Adresse am Zähler abgelesen und in `config.h` eingetragen
 - [ ] WLAN- und MQTT-Daten in `config.h` eingetragen (oder `WIFI_ENABLED 0`)
 - [ ] Board **ESP32 Dev Module**, Partition **Huge APP (3MB No OTA/1MB SPIFFS)**
-- [ ] RS485-Modul mit 3,3 V versorgt, Verdrahtung nach Kapitel 3
+- [ ] RS485-Modul mit **3,3 V** versorgt (nicht 5 V), Verdrahtung nach Kapitel 3
+- [ ] `PIN_RS485_DE` passend zum Modul gesetzt: `-1` beim empfohlenen Auto-Modul, sonst der GPIO des DE/RE-Pins
 - [ ] Firmware per USB geflasht
 - [ ] Serial Monitor zeigt `[BT] bereit`, die IP-Adresse und Zeilen `[SDM120] U=... E=... kWh`
 - [ ] Zählerstand im Serial Monitor stimmt mit dem Display des SDM120 überein

@@ -32,10 +32,13 @@
 
 // ---------------- Pins (D1 Mini ESP32) ----------------
 // RS485 läuft über den Hardware-UART2 (Serial2).
-#define PIN_RS485_RX     16                // IO16 <- RO / RXD des Moduls
-#define PIN_RS485_TX     17                // IO17 -> DI / TXD des Moduls
-#define PIN_RS485_DE     4                 // IO4  -> DE+RE (gebrückt)
-                                           // -1 bei Modul mit automatischer Richtungsumschaltung
+// Referenz-Hardware: Waveshare "TTL TO RS485 (B)", Hutschiene, galvanisch getrennt.
+// Dessen TTL-Seite führt nur VCC/GND/TXD/RXD und schaltet die Richtung selbst um.
+// Wichtig: VCC an 3V3, NICHT an 5 V - der TTL-Pegel folgt der Versorgungsspannung.
+#define PIN_RS485_RX     16                // IO16 <- TXD des Moduls (bei DE/RE-Modul: RO)
+#define PIN_RS485_TX     17                // IO17 -> RXD des Moduls (bei DE/RE-Modul: DI)
+#define PIN_RS485_DE     -1                // -1 = automatische Richtungsumschaltung, IO4 bleibt frei
+                                           // Modul mit DE+RE (gebrückt): hier den GPIO eintragen, z. B. 4
 
 // ---------------- Zeiten ----------------
 #define POLL_INTERVAL_MS   2000            // Abstand zwischen zwei kompletten Messzyklen
