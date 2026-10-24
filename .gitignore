@@ -1,0 +1,20 @@
+# Arduino / PlatformIO Build-Ausgaben
+build/
+.pio/
+.pioenvs/
+*.bin
+*.elf
+*.hex
+*.map
+
+# Editoren / Betriebssystem
+.vscode/
+.claude/
+Thumbs.db
+desktop.ini
+*.swp
+*~
+
+# Persoenliche Konfiguration (falls angelegt)
+config.local.h
+secrets.h
