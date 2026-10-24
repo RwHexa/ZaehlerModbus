@@ -372,6 +372,48 @@ App-seitige Fehlersuche: siehe `APP_INVENTOR.md`, Kapitel 7.
 
 ---
 
-## 13. Lizenz
+## 13. Weiterführende Dokumentation
+
+### Hersteller-Unterlagen zum SDM120
+
+Eastron verteilt die Unterlagen auf **zwei** Dokumente: eine Bedienungsanleitung und ein separates Protokoll-PDF mit der Registertabelle.
+
+| Dokument | Inhalt | Zugang |
+|---|---|---|
+| [SDM120-MODBUS/CT-MV User Manual](https://docs.vekto.nl/media/eastron/smd120-modbus.pdf) (englisch) | Sicherheitshinweise, Anzeige, **Setup-Menü**, Klemmenbelegung, Pulsausgänge, RS485-Parameter | frei |
+| „Eastron SDM120-Modbus protocol" | **Registertabelle** | nur über [eastroneurope.com](https://www.eastroneurope.com/products/view/sdm120modbus) mit Konto oder per Anfrage beim Händler |
+| [SDM120 Datenblatt](https://thundergrid.net/wp-content/uploads/2025/03/Eastron-SDM120-Single-Phase-Electrical-Meter-Datasheet.pdf) (englisch) | Genauigkeitsklasse, Messbereiche, MID | frei |
+| [SDM120CT-KIT User Manual V1.1](https://cdn.shopify.com/s/files/1/0558/1039/2117/files/Eastron_SDM120CT-KIT_user_manual_V1.1.pdf) (englisch) | für die CT-Variante mit Stromwandler | frei |
+
+Die in Kapitel 6 verwendeten Register sind mit den gängigen Community-Implementierungen abgeglichen. Das Protokoll-PDF brauchst du nur, wenn du **weitere** Register ergänzen willst.
+
+### Klemmenbelegung laut Handbuch
+
+| Klemme | Belegung |
+|---|---|
+| 1 / 2 | L-in / L-out |
+| 3 / 4 | Neutralleiter |
+| 5 / 6 / 7 | Pulsausgang |
+| 8 / 9 / 10 | RS485: **G / B / A** |
+
+Klemme 8 (**G**) ist der gemeinsame Bezug. Bei kurzen Leitungen reichen A und B, bei längeren Strecken oder getrennten Netzteilen gehört G mit an die Masse des RS485-Moduls.
+
+### Praktische Quellen
+
+- [evcc-Doku: Eastron SDM120-Modbus](https://docs.evcc.io/de/meters/eastron-sdm120-modbus) – deutschsprachig, mit Beispielkonfiguration
+- [TapHome: Eastron SDM120](https://taphome.com/en/compatibility/eastron-sdm120/) – unabhängige Registerliste zum Gegenlesen
+
+### ⚠ Zählweise der Registeradressen
+
+Fremde Tabellen zählen unterschiedlich: **PLC-Stil ab 30001** (30001 entspricht 0x0000), **dezimale Offsets** oder **hexadezimale Adressen** wie in Kapitel 6. Ein scheinbarer Versatz von genau 30001 ist fast immer nur eine andere Schreibweise. Prüfe die Zählweise, bevor du eine fremde Tabelle übernimmst.
+
+### Projekteigene Dokumente
+
+- [`APP_INVENTOR.md`](APP_INVENTOR.md) – Aufbau der Handy-App mit MIT App Inventor
+- [`Stromzaehler.aia`](Stromzaehler.aia) – fertiges App-Inventor-Projekt zum Importieren
+
+---
+
+## 14. Lizenz
 
 Dieses Projekt steht unter der **MIT-Lizenz**. Den vollständigen Text findest du in [LICENSE](LICENSE).
