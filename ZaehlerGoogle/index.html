@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SDM120 Zähler</title>
+<style>
+:root{--bg:#f3f4f6;--panel:#fff;--fg:#111827;--muted:#6b7280;--line:#e5e7eb;--acc:#2563eb;--ok:#16a34a;--warn:#d97706;--bad:#dc2626}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--panel:#181b22;--fg:#e5e7eb;--muted:#9ca3af;--line:#2a2f3a;--acc:#60a5fa;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:960px;margin:0 auto;padding:16px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+h1{font-size:1.25rem;margin:0}
+.status{display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--muted)}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
+.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.hero{margin-bottom:12px}
+.lbl{font-size:.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.big{font-size:2.8rem;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+.unit{font-size:1rem;font-weight:500;color:var(--muted);margin-left:4px}
+.richtung{font-size:.9rem;font-weight:600}
+.bar{height:12px;background:var(--line);border-radius:6px;overflow:hidden;margin-top:10px}
+.bar i{display:block;height:100%;width:0;background:var(--acc);transition:width .4s}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:12px}
+.val{font-size:1.6rem;font-weight:650;font-variant-numeric:tabular-nums;margin-top:4px}
+h2{font-size:.95rem;margin:20px 0 8px;color:var(--muted);font-weight:600}
+canvas{width:100%;height:180px;display:block}
+footer{margin-top:16px;font-size:.78rem;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 18px}
+.demo{background:var(--warn);color:#000;padding:2px 8px;border-radius:6px;font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>⚡ SDM120 Stromzähler</h1>
+    <div class="status"><span id="demo"></span><span class="dot" id="dot"></span><span id="stxt">verbinde …</span></div>
+  </header>
+
+  <div class="card hero">
+    <div class="lbl">Wirkleistung</div>
+    <div><span class="big" id="p">—</span><span class="unit">W</span> <span class="richtung" id="ri"></span></div>
+    <div class="bar"><i id="pbar"></i></div>
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="lbl">Spannung</div><div class="val"><span id="u">—</span><span class="unit">V</span></div></div>
+    <div class="card"><div class="lbl">Strom</div><div class="val"><span id="i">—</span><span class="unit">A</span></div></div>
+    <div class="card"><div class="lbl">Frequenz</div><div class="val"><span id="f">—</span><span class="unit">Hz</span></div></div>
+    <div class="card"><div class="lbl">Leistungsfaktor</div><div class="val"><span id="pf">—</span></div></div>
+    <div class="card"><div class="lbl">Scheinleistung</div><div class="val"><span id="s">—</span><span class="unit">VA</span></div></div>
+    <div class="card"><div class="lbl">Blindleistung</div><div class="val"><span id="q">—</span><span class="unit">var</span></div></div>
+    <div class="card"><div class="lbl">Phasenwinkel</div><div class="val"><span id="phi">—</span><span class="unit">°</span></div></div>
+  </div>
+
+  <h2>Energie</h2>
+  <div class="grid">
+    <div class="card"><div class="lbl">Bezug (Import)</div><div class="val"><span id="eImp">—</span><span class="unit">kWh</span></div></div>
+    <div class="card"><div class="lbl">Einspeisung (Export)</div><div class="val"><span id="eExp">—</span><span class="unit">kWh</span></div></div>
+    <div class="card"><div class="lbl">Gesamt</div><div class="val"><span id="eGes">—</span><span class="unit">kWh</span></div></div>
+  </div>
+
+  <h2>Leistungsverlauf (letzte 5 Minuten)</h2>
+  <div class="card"><canvas id="chart"></canvas></div>
+
+  <footer>
+    <span>Lesungen ok: <b id="sok">—</b></span>
+    <span>Fehler: <b id="sfe">—</b></span>
+    <span>Laufzeit ESP32: <b id="slz">—</b></span>
+    <span>Werte-Alter: <b id="salt">—</b></span>
+  </footer>
+</div>
+
+<script>
+// ---------- Einstellungen ----------
+const INTERVALL_MS = 2000;   // Abfrage-Intervall der Seite
+const P_MAX_W      = 3680;   // Vollausschlag Balken (16 A x 230 V)
+const HIST_PUNKTE  = 150;    // 150 x 2 s = 5 Minuten Verlauf
+// Demo-Modus: Datei lokal geöffnet oder ?demo in der Adresse
+const DEMO = location.protocol === 'file:' || new URLSearchParams(location.search).has('demo');
+
+const $ = id => document.getElementById(id);
+let hist = [];
+let fehlerInFolge = 0;
+
+function fmt(v, d) {
+  if (v === null || v === undefined || isNaN(v)) return '—';
+  return v.toLocaleString('de-DE', {minimumFractionDigits: d, maximumFractionDigits: d});
+}
+
+// Simulierte Werte für die Vorschau ohne ESP32
+let demoE = 1234.567, demoT0 = Date.now();
+function demoWerte() {
+  const t = (Date.now() - demoT0) / 1000;
+  const p = 450 + 380 * Math.sin(t / 25) + 120 * Math.sin(t / 3.7) + (Math.random() - .5) * 40;
+  const u = 230 + 2.5 * Math.sin(t / 40) + (Math.random() - .5);
+  const pf = 0.93 + 0.04 * Math.sin(t / 17);
+  const s = Math.abs(p) / pf;
+  demoE += Math.max(p, 0) * INTERVALL_MS / 3.6e9;
+  return {
+    ok: true, id: 1, alter_ms: 300,
+    werte: { u, i: s / u, p, s, q: Math.sqrt(s * s - p * p), pf, phi: Math.acos(pf) * 180 / Math.PI,
+             f: 50 + (Math.random() - .5) * .04, eImp: demoE, eExp: 12.345, eGes: demoE + 12.345 },
+    stat: { ok: Math.floor(t * 5.5), fehler: 0, laufzeit_s: Math.floor(t) }
+  };
+}
+
+async function holen() {
+  if (DEMO) return demoWerte();
+  const ctl = new AbortController();
+  const tmo = setTimeout(() => ctl.abort(), 3000);
+  try {
+    const r = await fetch('/api/werte', {signal: ctl.signal, cache: 'no-store'});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.json();
+  } finally { clearTimeout(tmo); }
+}
+
+function laufzeitText(s) {
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
+  return h > 0 ? h + ' h ' + m + ' min' : m + ' min ' + (s % 60) + ' s';
+}
+
+function status(klasse, text) { $('dot').className = 'dot ' + klasse; $('stxt').textContent = text; }
+
+function anzeigen(d) {
+  const w = d.werte || {};
+  $('p').textContent = fmt(w.p, 0);
+  $('u').textContent = fmt(w.u, 1);
+  $('i').textContent = fmt(w.i, 2);
+  $('f').textContent = fmt(w.f, 2);
+  $('pf').textContent = fmt(w.pf, 3);
+  $('s').textContent = fmt(w.s, 0);
+  $('q').textContent = fmt(w.q, 0);
+  $('phi').textContent = fmt(w.phi, 1);
+  $('eImp').textContent = fmt(w.eImp, 3);
+  $('eExp').textContent = fmt(w.eExp, 3);
+  $('eGes').textContent = fmt(w.eGes, 3);
+
+  // Balken + Richtung (SDM120: negative Wirkleistung = Einspeisung)
+  const p = w.p;
+  const bar = $('pbar');
+  if (p === null || p === undefined) { bar.style.width = '0'; $('ri').textContent = ''; }
+  else {
+    bar.style.width = Math.min(100, Math.abs(p) / P_MAX_W * 100) + '%';
+    bar.style.background = p < 0 ? 'var(--ok)' : 'var(--acc)';
+    $('ri').textContent = p < 0 ? '↗ Einspeisung' : '↘ Bezug';
+    $('ri').style.color = p < 0 ? 'var(--ok)' : 'var(--acc)';
+  }
+
+  const st = d.stat || {};
+  $('sok').textContent = st.ok ?? '—';
+  $('sfe').textContent = st.fehler ?? '—';
+  $('slz').textContent = st.laufzeit_s !== undefined ? laufzeitText(st.laufzeit_s) : '—';
+  $('salt').textContent = d.alter_ms !== undefined && d.alter_ms !== null ? fmt(d.alter_ms / 1000, 1) + ' s' : '—';
+
+  if (d.ok) status('ok', DEMO ? 'Demo-Werte' : 'Zähler online');
+  else status('warn', 'ESP32 ok, Zähler antwortet nicht');
+}
+
+function zeichneChart() {
+  const cv = $('chart');
+  const dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth, H = cv.clientHeight;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const g = cv.getContext('2d');
+  g.scale(dpr, dpr);
+  g.clearRect(0, 0, W, H);
+  const css = getComputedStyle(document.documentElement);
+  const cLine = css.getPropertyValue('--line'), cMuted = css.getPropertyValue('--muted'), cAcc = css.getPropertyValue('--acc');
+  const pts = hist.filter(v => v !== null);
+  if (pts.length < 2) {
+    g.fillStyle = cMuted; g.font = '13px system-ui'; g.fillText('Sammle Werte …', 10, 20); return;
+  }
+  let min = Math.min(0, ...pts), max = Math.max(...pts);
+  if (max - min < 50) max = min + 50;
+  const pad = (max - min) * 0.1; max += pad; if (min < 0) min -= pad;
+  const L = 48, R = 8, T = 8, B = 18;
+  const x = k => L + k / (HIST_PUNKTE - 1) * (W - L - R);
+  const y = v => T + (max - v) / (max - min) * (H - T - B);
+  // Gitter
+  g.strokeStyle = cLine; g.fillStyle = cMuted; g.font = '11px system-ui'; g.lineWidth = 1;
+  for (let k = 0; k <= 4; k++) {
+    const v = min + (max - min) * k / 4, yy = y(v);
+    g.beginPath(); g.moveTo(L, yy); g.lineTo(W - R, yy); g.stroke();
+    g.fillText(Math.round(v) + ' W', 2, yy + 4);
+  }
+  g.fillText('−5 min', L, H - 4);
+  g.fillText('jetzt', W - R - 26, H - 4);
+  // Linie
+  const off = HIST_PUNKTE - hist.length;
+  g.strokeStyle = cAcc; g.lineWidth = 2; g.beginPath();
+  let start = true;
+  hist.forEach((v, k) => {
+    if (v === null) { start = true; return; }
+    if (start) { g.moveTo(x(k + off), y(v)); start = false; } else g.lineTo(x(k + off), y(v));
+  });
+  g.stroke();
+}
+
+async function zyklus() {
+  try {
+    const d = await holen();
+    fehlerInFolge = 0;
+    anzeigen(d);
+    hist.push(d.werte && d.werte.p !== null && d.werte.p !== undefined ? d.werte.p : null);
+  } catch (e) {
+    fehlerInFolge++;
+    if (fehlerInFolge >= 2) status('bad', 'ESP32 nicht erreichbar');
+    hist.push(null);
+  }
+  if (hist.length > HIST_PUNKTE) hist.shift();
+  zeichneChart();
+  setTimeout(zyklus, INTERVALL_MS);
+}
+
+if (DEMO) $('demo').innerHTML = '<span class="demo">DEMO</span>';
+window.addEventListener('resize', zeichneChart);
+zyklus();
+</script>
+</body>
+</html>
